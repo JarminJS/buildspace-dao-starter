@@ -1,5 +1,5 @@
-import {useAddress, useEditionDrop, useMetamask } from '@thirdweb-dev/react'; 
-import {useState, useEffect } from 'react'; 
+import {useAddress, useEditionDrop, useMetamask, useToken } from '@thirdweb-dev/react'; 
+import {useState, useEffect, useMemo } from 'react'; 
 
 const App = () => {
   // use the hook thirdweb give us. 
@@ -10,11 +10,65 @@ const App = () => {
   // initialize our editionDrop contract 
   const editionDrop = useEditionDrop("0xe5796A4a95bc54C7FE397B49F6C7448Ae9645EbA"); 
 
+  // initialize token contract 
+  const token = useToken("0x413fB74Ffa8ef32E38Aca438333FcA371f396610"); 
+
   //state variable for us to know if user has our NFT 
   const [hasClaimedNFT, setHasClaimedNFT] = useState(false); 
 
   // isClaiming lets us easily keep a loading state while minting NFT
   const [isClaiming, setIsClaiming] = useState(false); 
+
+  // holds amount of token each member has in state
+  const [memberTokenAmounts, setMemberTokenAmounts] = useState([]); 
+
+  // array holding all of our members addresses 
+  const [memberAddresses, setMemberAddresses] = useState([]); 
+
+  // function to shorten wallet address
+  const shortenAddress = (str) => {
+    return str.substring(0, 6) + "..." + str.substring(str.length-4); 
+  }; 
+
+  // grabs all address of our member holding NFT
+  useEffect(() => {
+    if (!hasClaimedNFT) {
+      return;  
+    }
+
+    // Grab users who hold NFT with tokenId 0 
+    const getAllAddresses = async () => {
+      try {
+        const memberAddresses = await editionDrop.history.getAllClaimerAddresses(0);
+        setMemberAddresses(memberAddresses);
+        console.log("🚀 Members addresses: ", memberAddresses); 
+      } catch (err) { 
+        console.log("Failed to get member list: ", err); 
+      }
+    }; 
+
+    getAllAddresses(); 
+
+  }, [hasClaimedNFT, editionDrop.history]); 
+
+
+  useEffect(() => {
+    if(!hasClaimedNFT){
+      return; 
+    }
+
+    const getAllBalances = async () => {
+      try {
+        const amounts = await token.history.getAllHolderBalances(); 
+        setMemberTokenAmounts(amounts); 
+        console.log("👜 Amounts", amounts); 
+      } catch (err) {
+        console.log("Failed to get balances :", err);
+      }
+    }; 
+    getAllBalances(); 
+  }, [hasClaimedNFT, token.history]); 
+
   useEffect(() =>{
     if(!address){
       return; 
@@ -40,6 +94,20 @@ const App = () => {
     }; 
     checkBalance(); 
   }, [address, editionDrop]); 
+  
+  const memberList = useMemo(() => {
+    return memberAddresses.map((address) => {
+      // checking if we are finding adresss in the memberTokenAmounts array 
+      // if true, return amount of token; if false, return 0 
+
+      const member = memberTokenAmounts?.find(({holder}) => holder  === address); 
+
+      return{
+        address, 
+        tokenAmount: member?.balance.displayValue || "0", 
+      }
+    }); 
+  }, [memberAddresses, memberTokenAmounts]);
   
   const getNftLink = async () => {
     try {
@@ -80,11 +148,34 @@ const App = () => {
 
     if(hasClaimedNFT) {
       return (
-        <div className = "member-page">
-          <h1>👨🏻‍🎓 DAO Member Page</h1>
-          <p>Good to see you member!</p>
+        <div className="member-page">
+          <h1>🍪DAO Member Page</h1>
+          <p>Congratulations on being a member</p>
+          <div>
+            <div>
+              <h2>Member List</h2>
+              <table className="card">
+                <thead>
+                  <tr>
+                    <th>Address</th>
+                    <th>Token Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {memberList.map((member) => {
+                    return (
+                      <tr key={member.address}>
+                        <td>{shortenAddress(member.address)}</td>
+                        <td>{member.tokenAmount}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      )
+      );
     }
   // This is the case where we have the user's address -> they've connected their wallet 
   
